@@ -18,6 +18,9 @@ SPACE: Flap wings / Start game / Restart after game over
 REQUIREMENTS
 - Python 3.6+
 Pygame 2.0+
+
+
+
 INSTALLATION
 1. Clone the repository:
 git clone https://github.com/yourusername/flappy-bird-clone.git
