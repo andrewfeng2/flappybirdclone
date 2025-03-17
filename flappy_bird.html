@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flappy Bird Clone</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #333;
+        }
+        canvas {
+            border: 2px solid white;
+        }
+    </style>
+</head>
+<body>
+    <script>
+        // Game configuration
+        const config = {
+            type: Phaser.AUTO,
+            width: 400,
+            height: 600,
+            physics: {
+                default: 'arcade',
+                arcade: {
+                    gravity: { y: 0 },
+                    debug: false
+                }
+            },
+            scene: {
+                create: create,
+                update: update
+            }
+        };
+
+        // Game variables
+        let bird;
+        let pipes;
+        let ground;
+        let gameOver = false;
+        let gameStarted = false;
+        let score = 0;
+        let scoreText;
+        let startText;
+        let gameOverText;
+        let spaceKey;
+        let pipeSpawnTimer;
+
+        // Constants
+        const GRAVITY = 600;
+        const FLAP_STRENGTH = -300;
+        const PIPE_SPEED = 200;
+        const PIPE_SPAWN_RATE = 1500; // milliseconds
+        const PIPE_GAP = 150;
+
+        // Create game instance
+        const game = new Phaser.Game(config);
+
+        function create() {
+            // Set background color
+            this.cameras.main.setBackgroundColor('#87CEEB');
+
+            // Create bird (a simple circle)
+            bird = this.add.circle(100, 300, 15, 0x0000ff);
+            this.physics.add.existing(bird);
+            bird.body.gravity.y = 0; // Will be set when game starts
+
+            // Create pipe group
+            pipes = this.physics.add.group();
+
+            // Create ground
+            ground = this.physics.add.staticGroup();
+            const groundRect = this.add.rectangle(200, 550, 400, 100, 0x8B4513);
+            ground.add(groundRect);
+            groundRect.body.updateFromGameObject();
+
+            // Set up collisions
+            this.physics.add.collider(bird, ground, gameEnd, null, this);
+            this.physics.add.collider(bird, pipes, gameEnd, null, this);
+
+            // Set up input
+            spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+
+            // Create score text
+            scoreText = this.add.text(16, 16, 'Score: 0', { fontSize: '24px', fill: '#fff' });
+
+            // Create start text
+            startText = this.add.text(100, 300, 'Press SPACE to start', { fontSize: '20px', fill: '#fff' });
+
+            // Create game over text (hidden initially)
+            gameOverText = this.add.text(70, 300, 'Game Over! Press SPACE to restart', { fontSize: '16px', fill: '#fff' });
+            gameOverText.visible = false;
+        }
+
+        function update() {
+            // Handle game start
+            if (!gameStarted && Phaser.Input.Keyboard.JustDown(spaceKey)) {
+                startGame.call(this);
+            }
+
+            // Handle restart
+            if (gameOver && Phaser.Input.Keyboard.JustDown(spaceKey)) {
+                restartGame.call(this);
+            }
+
+            // Handle flap
+            if (gameStarted && !gameOver && Phaser.Input.Keyboard.JustDown(spaceKey)) {
+                flap();
+            }
+
+            // Remove pipes that are off screen
+            pipes.getChildren().forEach(pipe => {
+                if (pipe.x < -pipe.width) {
+                    pipe.destroy();
+                }
+                
+                // Check if bird passed the pipe
+                if (!pipe.scored && pipe.x < bird.x) {
+                    pipe.scored = true;
+                    addScore();
+                }
+            });
+
+            // Check if bird is out of bounds (top)
+            if (bird.y < 0) {
+                gameEnd.call(this);
+            }
+        }
+
+        function startGame() {
+            gameStarted = true;
+            startText.visible = false;
+            
+            // Set bird gravity
+            bird.body.gravity.y = GRAVITY;
+            
+            // Start spawning pipes
+            pipeSpawnTimer = this.time.addEvent({
+                delay: PIPE_SPAWN_RATE,
+                callback: spawnPipes,
+                callbackScope: this,
+                loop: true
+            });
+            
+            // Initial flap
+            flap();
+        }
+
+        function spawnPipes() {
+            if (gameOver) return;
+            
+            // Calculate random gap position
+            const gapY = Phaser.Math.Between(150, 450);
+            
+            // Create top pipe (rectangle)
+            const topPipeHeight = gapY - PIPE_GAP/2;
+            const topPipe = this.add.rectangle(400, topPipeHeight/2, 60, topPipeHeight, 0x00aa00);
+            this.physics.add.existing(topPipe);
+            pipes.add(topPipe);
+            topPipe.body.allowGravity = false;
+            topPipe.body.immovable = true;
+            topPipe.body.velocity.x = -PIPE_SPEED;
+            topPipe.scored = false;
+            
+            // Create bottom pipe (rectangle)
+            const bottomPipeTop = gapY + PIPE_GAP/2;
+            const bottomPipeHeight = 600 - bottomPipeTop;
+            const bottomPipe = this.add.rectangle(400, bottomPipeTop + bottomPipeHeight/2, 60, bottomPipeHeight, 0x00aa00);
+            this.physics.add.existing(bottomPipe);
+            pipes.add(bottomPipe);
+            bottomPipe.body.allowGravity = false;
+            bottomPipe.body.immovable = true;
+            bottomPipe.body.velocity.x = -PIPE_SPEED;
+        }
+
+        function flap() {
+            bird.body.velocity.y = FLAP_STRENGTH;
+        }
+
+        function addScore() {
+            score += 1;
+            scoreText.setText('Score: ' + score);
+        }
+
+        function gameEnd() {
+            if (gameOver) return;
+            
+            gameOver = true;
+            
+            // Stop pipes
+            pipes.getChildren().forEach(pipe => {
+                pipe.body.velocity.x = 0;
+            });
+            
+            // Stop timer
+            if (pipeSpawnTimer) pipeSpawnTimer.remove();
+            
+            // Show game over text
+            gameOverText.visible = true;
+        }
+
+        function restartGame() {
+            // Reset game state
+            gameOver = false;
+            score = 0;
+            
+            // Reset UI
+            scoreText.setText('Score: 0');
+            gameOverText.visible = false;
+            
+            // Clear pipes
+            pipes.clear(true, true);
+            
+            // Reset bird
+            bird.setPosition(100, 300);
+            bird.body.velocity.y = 0;
+            
+            // Start game again
+            startGame.call(this);
+        }
+    </script>
+</body>
+</html>
